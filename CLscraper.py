@@ -21,26 +21,30 @@ except ImportError: from urllib2 import urlopen
 import random
 from configparser import ConfigParser
 CHECK_OLD_LISTINGS = True # If True, don't resend listings that have been reposted
+DEFAULT_SLEEP_INTERVAL = [60, 80]
+
 
 config=ConfigParser()
-config.read('config.ini')
-smtp_server=config.get("CLscraper","smtp_server").strip()
-smtp_username=config.get("CLscraper","smtp_username").strip()
-smtp_password=config.get("CLscraper","smtp_password").strip()
-fromaddr=config.get("CLscraper","fromaddr").strip()
-toaddrs = json.loads(config.get("CLscraper","toaddrs"))
-urls = json.loads(config.get("CLscraper","urls"))
-sleepinterval = json.loads(config.get("CLscraper","sleeptime"))
-
-if sleepinterval[1] < sleepinterval[0]:
-	print("Sleep interval %s is not well formed, second number must be larger than the first. Exiting..." % str(sleepinterval))
-	exit(1)
-
-SLEEPTIME = random.randint(60*sleepinterval[0],60*sleepinterval[1]) # Number of seconds between searches, randomly between 1mn to 10mn
-
-
+conf = {}
 old_listings = [] #Initialize list of old posting's unique craigslist ID
 email = [] #Initialize list of posting's to be emailed after some run.
+
+def load_config(conf, config):
+	config.read('config.ini')
+	conf["smtp_server"]=config.get("CLscraper","smtp_server").strip()
+	conf["smtp_username"]=config.get("CLscraper","smtp_username").strip()
+	conf["smtp_password"]=config.get("CLscraper","smtp_password").strip()
+	conf["fromaddr"]=config.get("CLscraper","fromaddr").strip()
+	conf["toaddrs"] = json.loads(config.get("CLscraper","toaddrs"))
+	conf["urls"] = json.loads(config.get("CLscraper","urls"))
+	sleepinterval = json.loads(config.get("CLscraper","sleeptime"))
+
+	if sleepinterval[1] < sleepinterval[0]:
+		print("Sleep interval %s is not well formed, second number must be larger than the first. Using defqult interval" % str(sleepinterval))
+		sleepinterval = DEFAULT_SLEEP_INTERVAL
+
+	conf["sleeptime"] = random.randint(60*sleepinterval[0],60*sleepinterval[1]) # Number of seconds between searches
+
 
 def constructMessage(msg, new_listings):
 	"""Constructs the message given the message head and the list of new postings"""
@@ -53,7 +57,7 @@ def getListOfIdsAndUrls():
 	"""Scrapes the web pages for listings and returns a dictionary with PIDs as keys and (URLs, title) as value for stuff not in old_listings"""
 	new_listings = {} #dictionary which holds the unique ID for each listing and the URL.
 
-	for craigslistLinkAddress in urls: 
+	for craigslistLinkAddress in conf["urls"]: 
 		f = urlopen(craigslistLinkAddress) #Open Web Address
 
 		soup = BeautifulSoup(f.read(),"html.parser") #read in html into BS4 data structure 
@@ -89,33 +93,35 @@ def doIteration(msg):
 		msg = constructMessage(msg, new_listings)
 		sys.stdout.buffer.write(("Found new listings, about to send email: \n\n%s" % msg).encode('utf-8'))
 		sys.stdout.buffer.flush()
-		server = smtplib.SMTP(smtp_server)  
+		server = smtplib.SMTP(conf["smtp_server"])  
 		server.starttls()  
-		if smtp_username: server.login(smtp_username,smtp_password)  
-		server.sendmail(fromaddr, toaddrs, msg.encode('utf-8'))  
+		if conf["smtp_username"]: server.login(conf["smtp_username"],conf["smtp_password"])  
+		server.sendmail(conf["fromaddr"], conf["toaddrs"], msg.encode('utf-8'))  
 		server.quit() 
 	else:
 		print("No new listings found")
 
+load_config(conf, config)
+
 # ---- Start Initialization Run to get all posts already on craigslist
 #Welcome message sent on first email
-msg = "Hi! \n I will do your craigslist search between every %f to %f minutes and notify you whenever a new listing is posted that matches our search criteria. Here are all the intial positings that were up at the time your search was started... \n\n" % (sleepinterval[0], sleepinterval[1])
+msg = "Hi! \n I will do your craigslist search and notify you whenever a new listing is posted that matches your search criteria. Here are all the intial positings that were up at the time your search was started... \n\n"
 doIteration(msg)
 email = [] #re-initialize list of new posts and new post flag
 new = False	
-time.sleep(SLEEPTIME) #wait for SLEEPTIME seconds before entering main loop
+time.sleep(conf["sleeptime"]) #wait for sleeptime seconds before entering main loop
 
 
 # ---- End Initialization Run
 # ---- Start Main Loop
 
 while True:
+	load_config(conf, config)
 	print("\n\n "+str(datetime.datetime.now())+":  --Checking again!-- \n\n") #Print timestamp to terminal so you know it's working
 	
 	msg = "There are new postings: \n\n" #construct new message header
 	doIteration(msg)
-	#re-initialize list of new posts and new post flag and wait SLEEPTIME seconds before starting again
+	#re-initialize list of new posts and new post flag and wait sleeptime seconds before starting again
 	email = []
 	new = False
-	time.sleep(SLEEPTIME)
-	SLEEPTIME = random.randint(60*sleepinterval[0],60*sleepinterval[1])
+	time.sleep(conf["sleeptime"])
