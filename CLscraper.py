@@ -35,7 +35,7 @@ old_listings = [] #Initialize list of old posting's unique craigslist ID
 email = [] #Initialize list of posting's to be emailed after some run.
 
 def load_config(conf, config):
-	config.read('config.ini')
+	config.read(CONFIG_FILE)
 	conf["smtp_server"]=config.get("CLscraper","smtp_server").strip()
 	conf["smtp_username"]=config.get("CLscraper","smtp_username").strip()
 	conf["smtp_password"]=config.get("CLscraper","smtp_password").strip()
