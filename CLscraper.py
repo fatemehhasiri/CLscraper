@@ -23,6 +23,11 @@ from configparser import ConfigParser
 CHECK_OLD_LISTINGS = True # If True, don't resend listings that have been reposted
 DEFAULT_SLEEP_INTERVAL = [60, 80]
 
+if len(sys.argv) > 1:
+    CONFIG_FILE = str(sys.argv[1])
+else:
+    print("No config file name were passed as argument. Exiting...")
+    exit(1)
 
 config=ConfigParser()
 conf = {}
