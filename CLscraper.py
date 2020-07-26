@@ -71,12 +71,16 @@ def append_listings(new_listings, result_file=RESULT_FILE):
             f.write("%s\n" % item)
 
 
-def constructMessage(msg, new_listings):
-    """Constructs the message given the message head and the list of new postings"""
-    msg = "Subject: New Matches on Craigslist Search \n\n"+msg
-    for pid in new_listings.keys():  # construct the email message
-        msg = msg+new_listings[pid][0]+" : "+new_listings[pid][1]+"\n"
-    return msg
+def constructMessage(new_listings):
+    subject =  'Subject: New Matches on Craigslist Search "' + CONFIG_FILE + '" \n\n' 
+    header = 'New postings for search "' + CONFIG_FILE + '" : \n\n'
+    msg = ''
+    for pid in new_listings.keys():
+        msg = msg + new_listings[pid][0] + " : " + new_listings[pid][1] + "\n"
+    details = '\n Details on search configuration : \n' + '\tList of urls : \n'
+    for url in conf['urls']:
+        details = details + '\t\t' + url
+    return subject + header +  msg + details
 
 
 def getListOfIdsAndUrls():
@@ -128,12 +132,12 @@ def getListOfIdsAndUrls():
     return new_listings
 
 
-def doIteration(msg):
+def doIteration():
     new_listings = getListOfIdsAndUrls()
 
     if new_listings:
-        msg = constructMessage(msg, new_listings)
-        print(("Found new listings, about to send email: \n\n%s" % msg))
+        msg = constructMessage(new_listings)
+        print('Found new listings, sending email')
         server = smtplib.SMTP(conf["smtp_server"])
         server.starttls()
         if conf["smtp_username"]:
@@ -149,11 +153,9 @@ while True:
     load_config(conf, config)
     # Print timestamp to terminal so you know it's working
     print("\n\n "+str(datetime.datetime.now())+":  --Checking!-- \n\n")
-
-    msg = "New postings for config file " + CONFIG_FILE + \
-        ": \n\n"  # construct new message header
-    doIteration(msg)
+    doIteration()
     # re-initialize list of new posts and new post flag and wait sleeptime seconds before starting again
     email = []
     new = False
     time.sleep(conf["sleeptime"])
+3
