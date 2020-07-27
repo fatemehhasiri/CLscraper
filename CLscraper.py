@@ -78,7 +78,8 @@ def constructMessage(new_listings):
         msg = msg + new_listings[pid][0] + " : " + new_listings[pid][1] + "\n"
     details = '\n Details on search configuration : \n' + '\tList of urls : \n'
     for url in conf['urls']:
-        details = details + '\t\t' + url
+        details = details + '\t\t' + url + '\n'
+    details = details + '\t Word based exclusions : "' + '", "'.join(conf['exclude']) + '" \n'
     return subject + header +  msg + details
 
 
