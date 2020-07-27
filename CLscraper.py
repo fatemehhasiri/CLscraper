@@ -22,7 +22,6 @@ import random
 from configparser import ConfigParser
 
 
-CHECK_OLD_LISTINGS = True  # If True, don't resend listings that have been reposted
 DEFAULT_SLEEP_INTERVAL = [60, 80]
 
 if len(sys.argv) > 1:
@@ -45,15 +44,15 @@ def load_config(conf, config):
     conf["fromaddr"] = config.get("CLscraper", "fromaddr").strip()
     conf["toaddrs"] = json.loads(config.get("CLscraper", "toaddrs"))
     conf["urls"] = json.loads(config.get("CLscraper", "urls"))
+    conf['exclude'] = json.loads(config.get("CLscraper", "exclude"))
     sleepinterval = json.loads(config.get("CLscraper", "sleeptime"))
 
     if sleepinterval[1] < sleepinterval[0]:
-        print("Sleep interval %s is not well formed, second number must be larger than the first. Using defqult interval" % str(sleepinterval))
+        print("Sleep interval %s is not well formed, second number must be larger than the first. Using default interval" % str(sleepinterval))
         sleepinterval = DEFAULT_SLEEP_INTERVAL
 
     # Number of seconds between searches
-    conf["sleeptime"] = random.randint(
-        60*sleepinterval[0], 60*sleepinterval[1])
+    conf["sleeptime"] = random.randint(60*sleepinterval[0], 60*sleepinterval[1])
 
 
 def read_old_listings(result_file=RESULT_FILE):
@@ -96,36 +95,28 @@ def getListOfIdsAndUrls():
         soup = BeautifulSoup(f.read(), "html.parser")
 
         # Get the body of the search, strips away all the sidebars and stuff.
-        content = str(soup.find_all("div", class_="content")[0])
-
-        # Remove's the links from "nearby" towns that are far away
-        soup = BeautifulSoup(content[:content.find(
-            "<h4 class=\"ban nearby\">")], "html.parser")
+        content = soup.find(id="sortable-results")
 
         # For each listing, find the listings by searching for results table elements. This tag also stores a unique ID for each listing
-        for listing in soup.find_all("li", {"class": "result-row"}):
-            # grad the unique ID and URL for the listing, CHECK_OLD_LISTINGS is set, it also checks the repost of ID against the old_listings list.
-            pid = listing.attrs["data-pid"]
-            old_pid = pid
-            # finds the link by looking for a link with results-title class and extracts the url.
-            url = listing.find("a", {"class": "result-title"}).attrs["href"]
-            # finds the listing title
-            title = listing.find("a", {"class": "result-title"}).text
-            if CHECK_OLD_LISTINGS:
-                if "data-repost-of" in listing.attrs.keys():
-                    old_pid = listing.attrs["data-repost-of"]
-
-            # check if listing is in the old list
-            if (pid not in old_listings) and (old_pid not in old_listings) and pid is not old_pid:
-                new_listings[pid] = (url, title)  # listing should be returned
-                # add the new pid to list of ones we've seen
-                listings_to_save.append(pid)
-                # add the old pid to list of ones we've seen for future proofing
-                listings_to_save.append(old_pid)
-
-            elif (pid not in old_listings):
-                # I'm not sure if the old PID gets updated when someone reposts, or if it stays as the very first PID the listing was ever posted as. This should take care of the former case.
-                listings_to_save.append(pid)
+        for listing in content.find_all("li", {"class": "result-row"}):
+            date = datetime.datetime.strptime(listing.find('time').attrs['datetime'], '%Y-%m-%d %H:%M')
+            #keeping post from last 24h only
+            if date + datetime.timedelta(hours = 24) > datetime.datetime.now():
+                # finds the listing title
+                title = listing.find("a", {"class": "result-title"}).text
+                ignore = False
+                for word in conf['exclude']:
+                    if word.lower() in title.lower():
+                        ignore = True
+                if not ignore:
+                    pid = listing.attrs["data-pid"]
+                    # finds the link by looking for a link with results-title class and extracts the url.
+                    url = listing.find("a", {"class": "result-title"}).attrs["href"]
+                    # check if listing is in the old list
+                    if pid not in old_listings:
+                        new_listings[pid] = (url, title)  # listing should be returned
+                        # add the new pid to list of ones we've seen
+                        listings_to_save.append(pid)
 
     append_listings(listings_to_save)
 
@@ -158,4 +149,3 @@ while True:
     email = []
     new = False
     time.sleep(conf["sleeptime"])
-3
