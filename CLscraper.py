@@ -20,6 +20,8 @@ except ImportError:
     from urllib2 import urlopen
 import random
 from configparser import ConfigParser
+from sendgrid import SendGridAPIClient
+from sendgrid.helpers.mail import Mail
 
 
 DEFAULT_SLEEP_INTERVAL = [60, 80]
@@ -34,8 +36,6 @@ else:
 config = ConfigParser()
 conf = {}
 email = []  # Initialize list of posting's to be emailed after some run.
-
-
 def load_config(conf, config):
     config.read(CONFIG_FILE)
     conf["smtp_server"] = config.get("CLscraper", "smtp_server").strip()
@@ -45,6 +45,7 @@ def load_config(conf, config):
     conf["toaddrs"] = json.loads(config.get("CLscraper", "toaddrs"))
     conf["urls"] = json.loads(config.get("CLscraper", "urls"))
     conf['exclude'] = json.loads(config.get("CLscraper", "exclude"))
+    conf["SENDGRID_API_KEY"] = config.get("CLscraper", "SENDGRID_API_KEY").strip()
     sleepinterval = json.loads(config.get("CLscraper", "sleeptime"))
 
     if sleepinterval[1] < sleepinterval[0]:
@@ -71,7 +72,7 @@ def append_listings(new_listings, result_file=RESULT_FILE):
 
 
 def constructMessage(new_listings):
-    subject =  'Subject: New Matches on Craigslist Search "' + CONFIG_FILE + '" \n\n' 
+    subject =  'Subject: New Matches on Craigslist Search "' + CONFIG_FILE + '" \n\n'
     header = 'New postings for search "' + CONFIG_FILE + '" : \n\n'
     msg = ''
     for pid in new_listings.keys():
@@ -124,18 +125,39 @@ def getListOfIdsAndUrls():
     return new_listings
 
 
-def doIteration():
-    new_listings = getListOfIdsAndUrls()
+def send_notification(msg):
+    print(f"Sending notification: {msg}")
+    if conf["SENDGRID_API_KEY"]:
+        message = Mail(
+            from_email=conf["fromaddr"],
+            to_emails=conf["toaddrs"],
+            subject=msg,
+            html_content=msg)
+        try:
+            sg = SendGridAPIClient(conf["SENDGRID_API_KEY"])
+            response = sg.send(message)
+            print(response.status_code)
+            print(response.body)
+            print(response.headers)
+        except Exception as e:
+            print(e.message)
 
-    if new_listings:
-        msg = constructMessage(new_listings)
-        print('Found new listings, sending email')
-        server = smtplib.SMTP(conf["smtp_server"])
-        server.starttls()
-        if conf["smtp_username"]:
-            server.login(conf["smtp_username"], conf["smtp_password"])
+
+def send_email(msg):
+    print('Found new listings, sending email')
+    server = smtplib.SMTP(conf["smtp_server"])
+    server.starttls()
+    if conf["smtp_username"]:
+        server.login(conf["smtp_username"], conf["smtp_password"])
         server.sendmail(conf["fromaddr"], conf["toaddrs"], msg.encode('utf-8'))
         server.quit()
+
+
+def doIteration():
+    new_listings = getListOfIdsAndUrls()
+    if new_listings:
+        msg = constructMessage(new_listings)
+        send_notification(msg)
     else:
         print("No new listings found")
 
