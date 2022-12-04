@@ -22,6 +22,7 @@ import random
 from configparser import ConfigParser
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import Mail
+import requests
 
 
 DEFAULT_SLEEP_INTERVAL = [60, 80]
@@ -36,6 +37,8 @@ else:
 config = ConfigParser()
 conf = {}
 email = []  # Initialize list of posting's to be emailed after some run.
+
+
 def load_config(conf, config):
     config.read(CONFIG_FILE)
     conf["smtp_server"] = config.get("CLscraper", "smtp_server").strip()
@@ -45,8 +48,10 @@ def load_config(conf, config):
     conf["toaddrs"] = json.loads(config.get("CLscraper", "toaddrs"))
     conf["urls"] = json.loads(config.get("CLscraper", "urls"))
     conf['exclude'] = json.loads(config.get("CLscraper", "exclude"))
-    conf["SENDGRID_API_KEY"] = config.get("CLscraper", "SENDGRID_API_KEY").strip()
     sleepinterval = json.loads(config.get("CLscraper", "sleeptime"))
+    conf["SENDGRID_API_KEY"] = config['SENDGRID']['SENDGRID_API_KEY']
+    conf["PUSH_TOKEN"] = config['PUSHOVER']['PUSH_TOKEN']
+    conf["PUSH_USER"] = config['PUSHOVER']['PUSH_USER']
 
     if sleepinterval[1] < sleepinterval[0]:
         print("Sleep interval %s is not well formed, second number must be larger than the first. Using default interval" % str(sleepinterval))
@@ -126,7 +131,15 @@ def getListOfIdsAndUrls():
 
 
 def send_notification(msg):
-    print(f"Sending notification: {msg}")
+    if conf["PUSH_TOKEN"]:
+        send_push_notification(msg)
+
+    if conf['SENDGRID_API_KEY']:
+        send_email_via_sendGrid(msg)
+
+
+def send_email_via_sendGrid(msg):
+    print(f"Sending email via sendGrid: {msg}")
     if conf["SENDGRID_API_KEY"]:
         message = Mail(
             from_email=conf["fromaddr"],
@@ -141,6 +154,17 @@ def send_notification(msg):
             print(response.headers)
         except Exception as e:
             print(e.message)
+
+
+def send_push_notification(msg):
+    print("sending push token")
+    url = "https://api.pushover.net/1/messages.json"
+    data = {
+        "token": conf["PUSH_TOKEN"],
+        "user": conf["PUSH_USER"],
+        "message": msg
+    }
+    requests.post(url, data)
 
 
 def send_email(msg):
